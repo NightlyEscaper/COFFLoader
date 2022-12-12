@@ -218,14 +218,28 @@ void BeaconFormatInt(formatp* format, int value) {
 void BeaconPrintf(int type, char* fmt, ...) {
     /* Change to maintain internal buffer, and return after done running. */
     int length = 0;
+    int fLen = 0;
+    int fFlag = 0; 
     char* tempptr = NULL;
+    char* buff = NULL;
+ 
+    char* tmp = fmt;
+    fLen = strlen(fmt);
+    if ('\n' != fmt[fLen-1]){
+     fFlag = 1;
+     buff = (char*)malloc(fLen+2);
+     strncpy(buff, fmt, fLen);
+     buff[fLen] = '\n';
+     buff[fLen+1] = '\0';
+     tmp = buff;
+    }
     va_list args;
     va_start(args, fmt);
-    vprintf(fmt, args);
+    vprintf(tmp, args);
     va_end(args);
 
     va_start(args, fmt);
-    length = vsnprintf(NULL, 0, fmt, args);
+    length = vsnprintf(NULL, 0, tmp, args);
     va_end(args);
     tempptr = realloc(beacon_compatibility_output, beacon_compatibility_size + length + 1);
     if (tempptr == NULL) {
@@ -234,10 +248,13 @@ void BeaconPrintf(int type, char* fmt, ...) {
     beacon_compatibility_output = tempptr;
     memset(beacon_compatibility_output + beacon_compatibility_offset, 0, length + 1);
     va_start(args, fmt);
-    length = vsnprintf(beacon_compatibility_output + beacon_compatibility_offset, length +1, fmt, args);
+    length = vsnprintf(beacon_compatibility_output + beacon_compatibility_offset, length +1, tmp, args);
     beacon_compatibility_size += length;
     beacon_compatibility_offset += length;
     va_end(args);
+    if(1==fFlag){
+     free(buff);
+    }
     return;
 }
 
