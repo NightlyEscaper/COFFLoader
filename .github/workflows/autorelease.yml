@@ -1,14 +1,67 @@
-name: Release
+name: 'Release'
 
 on:
-  push:
-    tags: ["v[1-9]+.[0-9]+.[0-9]+"]
-    branches: [main]
+  schedule:
+    - cron:  '0 5 * * 0'
+    # scheduled at 05:00 every Sunday
+
+  workflow_dispatch:  # click the button on Github repo!
 
 jobs:
+  sync_latest_from_upstream:
+    runs-on: ubuntu-latest
+    name: Sync latest commits from upstream repo
+    outputs:
+      status: ${{ steps.sync.outputs.has_new_commits }}
+      tag:   ${{ steps.tag.outputs.tag || steps.lastesttag.outputs.tag }}
+    steps:
+    # REQUIRED step
+    # Step 1: run a standard checkout action, provided by github
+    - name: Checkout target repo
+      uses: actions/checkout@v2
+      with:
+        # optional: set the branch to checkout,
+        # sync action checks out your 'target_sync_branch' anyway
+        ref:  main
+        # REQUIRED if your upstream repo is private (see wiki)
+        persist-credentials: false
+        fetch-depth: 0
+
+    # REQUIRED step
+    # Step 2: run the sync action
+    - name: Sync upstream changes
+      id: sync
+      uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+      with:
+        target_sync_branch: main
+        # REQUIRED 'target_repo_token' exactly like this!
+        target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+        upstream_sync_branch: main
+        upstream_sync_repo: sliverarmory/COFFLoader
+        shallow_since: '1 year ago'
+
+    # Step 3: Publish with tag.
+    - name: Bump version and push tag
+      id: tag
+      if: steps.sync.outputs.has_new_commits == 'true'
+      uses: anothrNick/github-tag-action@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        WITH_V: true
+        DEFAULT_BUMP: patch
+        
+    # Step 4: Get Latest tag
+    - name: 'Get Latest tag'
+      id: lastesttag
+      if: steps.sync.outputs.has_new_commits == 'false'
+      uses: "WyriHaximus/github-action-get-previous-tag@v1"
+      with:
+        fallback: '' # Optional fallback tag to use when no tag can be found
+        
   dll-build:
     name: Build the DLL
-    if: startsWith( github.ref, 'refs/tags/v')
+    needs: [sync_latest_from_upstream]
+    if: ${{ (needs.sync_latest_from_upstream.outputs.status == 'true') || (needs.sync_latest_from_upstream.outputs.tag == '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -37,8 +90,7 @@ jobs:
           make clean
           make all-dll
           mkdir artifacts
-          VERSION=$(git describe --tags --abbrev=0)
-          cat extension.json | jq ".version |= \"$VERSION\"" > ./artifacts/extension.json
+          cat extension.json | jq ".version |= \"${{ needs.sync_latest_from_upstream.outputs.tag || 'v0.0.0' }}\"" > ./artifacts/extension.json
           cp LICENSE.txt ./artifacts/LICENSE
           mv *.dll ./artifacts/
           cd artifacts
@@ -56,6 +108,7 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+          automatic_release_tag: ${{ needs.sync_latest_from_upstream.outputs.tag || 'v0.0.0' }}
           files: |
             ./coff-loader.tar.gz
             ./coff-loader.minisig
