@@ -234,11 +234,11 @@ void BeaconPrintf(int type, char* fmt, ...) {
      tmp = buff;
     }
     va_list args;
-    va_start(args, fmt);
+    va_start(args, tmp);
     vprintf(tmp, args);
     va_end(args);
 
-    va_start(args, fmt);
+    va_start(args, tmp);
     length = vsnprintf(NULL, 0, tmp, args);
     va_end(args);
     tempptr = realloc(beacon_compatibility_output, beacon_compatibility_size + length + 1);
@@ -247,7 +247,7 @@ void BeaconPrintf(int type, char* fmt, ...) {
     }
     beacon_compatibility_output = tempptr;
     memset(beacon_compatibility_output + beacon_compatibility_offset, 0, length + 1);
-    va_start(args, fmt);
+    va_start(args, tmp);
     length = vsnprintf(beacon_compatibility_output + beacon_compatibility_offset, length +1, tmp, args);
     beacon_compatibility_size += length;
     beacon_compatibility_offset += length;
